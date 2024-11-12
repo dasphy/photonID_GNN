@@ -1,0 +1,101 @@
+name: allegro_photonID
+
+model:
+  lrs_config:
+    initial: 1e-7
+    max: 5e-4
+    end: 1e-5
+    pct_start: 0.01
+    weight_decay: 1e-5
+
+  model:
+    class_path: salt.models.SaltModel
+    init_args:
+      init_nets:
+        - input_name: consts
+          dense_config:
+            output_size: &embed_dim 256
+            hidden_layers: [256]
+            activation: &activation ReLU
+
+      encoder:
+        class_path: salt.models.TransformerEncoder
+        init_args:
+          embed_dim: *embed_dim
+          num_layers: 4
+          out_dim: &out_dim 128
+          mha_config:
+            num_heads: 8
+            attention: { class_path: salt.models.ScaledDotProductAttention }
+          dense_config:
+            activation: *activation
+
+      pool_net:
+        class_path: salt.models.GlobalAttentionPooling
+        init_args: { input_size: *out_dim }
+
+##      tasks:
+##        class_path: torch.nn.ModuleList
+##        init_args:
+##          modules:
+##            - class_path: salt.models.TaskBase
+##              init_args:
+##                name: photon_pi0_classification
+##                input_name: jets
+##                loss:
+##                  class_path: torch.nn.CrossEntropyLoss
+##                  init_args: { weight: [1.0, 1.0] }
+##                dense_config: &task_dense_config
+##                  input_size: *out_dim
+##                  output_size: 2
+##                  hidden_layers: [128, 64, 32]
+##                  activation: *activation
+
+      tasks:
+        class_path: torch.nn.ModuleList
+        init_args:
+          modules:
+            - class_path: salt.models.ClassificationTask
+              init_args:
+                name: photon_pi0_classification
+                input_name: jets
+                label: flavour_label
+                loss:
+                  class_path: torch.nn.CrossEntropyLoss
+                  init_args: { weight: [1.0, 1.0] }
+                dense_config: &task_dense_config
+                  input_size: *out_dim
+                  output_size: 2
+                  hidden_layers: [128, 64, 32]
+                  activation: *activation
+
+data:
+  variables:
+    jets:
+      - clu_E
+      - clu_theta
+      - clu_phi
+    consts:
+      - cells_E
+      - cells_theta
+      - cells_phi
+      - cells_x
+      - cells_y
+      - cells_z
+      - cells_layer
+
+  #train_file: /afs/cern.ch/work/l/lit/fcc/photonID_GNN/ryan/egamma_gnn_common/allegro/root/outputTree_com_train_1_176337.h5
+  #val_file: /afs/cern.ch/work/l/lit/fcc/photonID_GNN/ryan/egamma_gnn_common/allegro/root/outputTree_com_val_1_176337.h5
+  train_file: /afs/cern.ch/work/l/lit/fcc/photonID_GNN/ryan/egamma_gnn_common/allegro/r3oot/outputTree_merged_train_1_1000.h5
+  val_file: /afs/cern.ch/work/l/lit/fcc/photonID_GNN/ryan/egamma_gnn_common/allegro/r3oot/outputTree_merged_val_1_1000.h5
+  norm_dict: /afs/cern.ch/work/l/lit/fcc/photonID_GNN/ryan/egamma_gnn_common/allegro/root/norm_dict.yaml
+  class_dict: /afs/cern.ch/work/l/lit/fcc/photonID_GNN/ryan/egamma_gnn_common/allegro/root/class_dict.yaml
+
+  batch_size: 4000
+  num_workers: 40
+
+trainer:
+  max_epochs: 40
+  accelerator: gpu
+  devices: 1
+  precision: 16-mixed
